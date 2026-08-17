@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # PRC Rental
 
 Occupancy management system for tracking rental rooms across buildings — who's in which room, move-in dates, and vacancy status. Two services: a Next.js frontend and an Express API.
@@ -88,3 +89,7 @@ Press `Ctrl+C` to stop both.
 | `npm run dev`            | frontend | Runs the frontend alone                          |
 | `npm run build` / `start`| frontend | Production build / serve                         |
 | `npm run lint`           | frontend | Lints the frontend                               |
+=======
+# PRC_Rental
+PRC_Rental
+>>>>>>> df70c63175fb5ca83e1b7954445e4f8d7b84c697
