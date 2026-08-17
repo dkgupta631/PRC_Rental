@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # PRC Rental
 
 Occupancy management system for tracking rental rooms across buildings — who's in which room, move-in dates, and vacancy status. Two services: a Next.js frontend and an Express API.
@@ -53,7 +52,7 @@ cp backend/.env.example backend/.env
 | `DB_USER` / `DB_PASSWORD`      | SQL Server credentials                                | _(none)_                |
 | `DB_NAME`                      | Database name                                         | `prc_rental_db`          |
 | `DB_ENCRYPT`                   | Encrypt the SQL connection                            | `false`                  |
-| `DB_TRUST_SERVER_CERTIFICATE`  | Trust a self-signed SQL Server cert                   | `true`                   |
+| `DB_TRUST_SERVER_CERTIFICATE`  | Trust a self-signed SQL Server cert                   | `false`                  |
 | `DB_CONNECTION_STRING`         | Overrides the individual `DB_*` values if set          | _(empty)_               |
 | `FRONTEND_URL`                 | Allowed CORS origin for the frontend                  | `http://localhost:3000` |
 | `ALLOW_CUSTOM_ROOMS`           | Allow room numbers outside the predefined ranges       | `false`                  |
@@ -89,7 +88,3 @@ Press `Ctrl+C` to stop both.
 | `npm run dev`            | frontend | Runs the frontend alone                          |
 | `npm run build` / `start`| frontend | Production build / serve                         |
 | `npm run lint`           | frontend | Lints the frontend                               |
-=======
-# PRC_Rental
-PRC_Rental
->>>>>>> df70c63175fb5ca83e1b7954445e4f8d7b84c697
