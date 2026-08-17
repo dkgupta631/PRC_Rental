@@ -1,0 +1,8 @@
+{
+  "name": "prc-rental",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "import:prc": "node scripts/import-prc.js"
+  }
+}

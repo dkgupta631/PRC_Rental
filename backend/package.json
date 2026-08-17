@@ -1,0 +1,22 @@
+{
+  "name": "prc-rental-backend",
+  "version": "1.0.0",
+  "description": "Express API for PRC Rental occupancy management",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.2",
+    "dotenv": "^16.4.1",
+    "exceljs": "^4.0.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.0.1",
+    "helmet": "^8.1.1",
+    "jsonwebtoken": "^9.0.3",
+    "mssql": "^10.0.0"
+  }
+}
