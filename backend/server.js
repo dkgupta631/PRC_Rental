@@ -308,6 +308,34 @@ function buildVacantDetail() {
   }).filter((entry) => entry.vacantRooms.length);
 }
 
+function buildBuildingRoomRows(building) {
+  const config = getBuildingConfig(building);
+  if (!config) return [];
+
+  const recordsByRoom = new Map(
+    store.records
+      .filter((record) => record.building === building)
+      .map((record) => [record.room_number.toUpperCase(), record])
+  );
+
+  const rows = [];
+  config.floors.forEach((floorEntry) => {
+    listRoomsFor(building, floorEntry.floor).forEach((roomNumber) => {
+      const record = recordsByRoom.get(roomNumber);
+      const occupied = Boolean(record && record.company && record.company.trim());
+      rows.push({
+        roomNumber,
+        floor: floorEntry.floor,
+        occupied,
+        company: occupied ? record.company : '',
+        note: record?.note || '',
+        moveInDate: record?.move_in_date || '',
+      });
+    });
+  });
+  return rows;
+}
+
 function buildTopTenants() {
   const totals = store.records.reduce((acc, record) => {
     if (!record.company || !record.company.trim()) return acc;
@@ -635,6 +663,141 @@ app.post('/api/rentals', authenticate, async (req, res) => {
   return res.status(201).json({ record });
 });
 
+// Registered before the /api/rentals/:id route below — otherwise Express
+// would match "export" as an :id and shadow this route with a 404.
+const EXPORT_COLORS = {
+  headerFill: 'FF5B2D8E',
+  headerText: 'FFFFFFFF',
+  titleFill: 'FFF5F0FA',
+  titleText: 'FF5B2D8E',
+  totalFill: 'FFE6D9F5',
+  totalText: 'FF5B2D8E',
+  good: 'FF0CA30C',
+  warning: 'FFD98A00',
+  critical: 'FFD03B3B',
+  occupiedFill: 'FFEAF7EA',
+  vacantFill: 'FFFCEEEE',
+  border: 'FFE1D9EE',
+};
+
+function occupancyStatusArgb(rate) {
+  if (rate >= 85) return EXPORT_COLORS.good;
+  if (rate >= 50) return EXPORT_COLORS.warning;
+  return EXPORT_COLORS.critical;
+}
+
+function styleTitleBar(worksheet, row, span, text) {
+  worksheet.mergeCells(row, 1, row, span);
+  const cell = worksheet.getCell(row, 1);
+  cell.value = text;
+  cell.font = { bold: true, size: 13, color: { argb: EXPORT_COLORS.titleText } };
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXPORT_COLORS.titleFill } };
+  cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  worksheet.getRow(row).height = 24;
+}
+
+function styleHeaderRow(worksheet, row) {
+  row.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: EXPORT_COLORS.headerText } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXPORT_COLORS.headerFill } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
+  row.height = 20;
+}
+
+function styleTotalBar(worksheet, row, span, text) {
+  worksheet.mergeCells(row, 1, row, span);
+  const cell = worksheet.getCell(row, 1);
+  cell.value = text;
+  cell.font = { bold: true, color: { argb: EXPORT_COLORS.totalText } };
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXPORT_COLORS.totalFill } };
+  cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  worksheet.getRow(row).height = 22;
+}
+
+app.get('/api/rentals/export', authenticate, async (req, res) => {
+  const workbook = new ExcelJS.Workbook();
+  const summary = buildDashboardSummary();
+
+  const summarySheet = workbook.addWorksheet('Summary');
+  summarySheet.columns = [
+    { key: 'building', width: 14 },
+    { key: 'totalRooms', width: 14 },
+    { key: 'occupiedRooms', width: 16 },
+    { key: 'vacantRooms', width: 14 },
+    { key: 'occupancyRate', width: 16 },
+  ];
+  styleTitleBar(summarySheet, 1, 5, 'PRC Rental — Occupancy Summary');
+  summarySheet.addRow(['Building', 'Total Rooms', 'Occupied Rooms', 'Vacant Rooms', 'Occupancy %']);
+  styleHeaderRow(summarySheet, summarySheet.getRow(2));
+  summary.buildings.forEach((entry) => {
+    const row = summarySheet.addRow([entry.building, entry.totalRooms, entry.occupiedRooms, entry.vacantRooms, `${entry.occupancyRate}%`]);
+    row.getCell(5).font = { bold: true, color: { argb: occupancyStatusArgb(entry.occupancyRate) } };
+    row.getCell(5).alignment = { horizontal: 'center' };
+    row.getCell(1).alignment = { horizontal: 'center' };
+  });
+  styleTotalBar(
+    summarySheet,
+    summarySheet.lastRow.number + 1,
+    5,
+    `Total ${summary.metrics.totalRooms} rooms · ${summary.metrics.occupiedRooms} occupied · ${summary.metrics.vacantRooms} vacant · ${summary.metrics.occupancyRate}% occupancy`
+  );
+  summarySheet.views = [{ state: 'frozen', ySplit: 2 }];
+
+  BUILDING_FLOORS.forEach((entry) => {
+    const rows = buildBuildingRoomRows(entry.building);
+    const occupiedCount = rows.filter((room) => room.occupied).length;
+    const totalCount = rows.length;
+    const occupancyRate = totalCount ? Math.round((occupiedCount / totalCount) * 100) : 0;
+
+    const sheet = workbook.addWorksheet(`Building ${entry.building}`);
+    sheet.columns = [
+      { key: 'no', width: 6 },
+      { key: 'roomNumber', width: 16 },
+      { key: 'floor', width: 8 },
+      { key: 'status', width: 12 },
+      { key: 'company', width: 28 },
+      { key: 'note', width: 30 },
+      { key: 'moveInDate', width: 16 },
+    ];
+
+    styleTitleBar(sheet, 1, 7, `Building ${entry.building} — Rooms`);
+    sheet.addRow(['No.', 'Room Number', 'Floor', 'Status', 'Company / Tenant', 'Note', 'Move-in Date']);
+    styleHeaderRow(sheet, sheet.getRow(2));
+
+    rows.forEach((room, index) => {
+      const row = sheet.addRow([
+        index + 1,
+        room.roomNumber,
+        room.floor,
+        room.occupied ? 'Occupied' : 'Vacant',
+        room.company,
+        room.note,
+        room.moveInDate,
+      ]);
+      const statusCell = row.getCell(4);
+      statusCell.font = { bold: true, color: { argb: room.occupied ? EXPORT_COLORS.good : EXPORT_COLORS.critical } };
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: room.occupied ? EXPORT_COLORS.occupiedFill : EXPORT_COLORS.vacantFill } };
+      statusCell.alignment = { horizontal: 'center' };
+      row.getCell(1).alignment = { horizontal: 'center' };
+      row.getCell(3).alignment = { horizontal: 'center' };
+    });
+
+    styleTotalBar(
+      sheet,
+      sheet.lastRow.number + 1,
+      7,
+      `Total ${totalCount} rooms · ${occupiedCount} occupied · ${totalCount - occupiedCount} vacant · ${occupancyRate}% occupancy`
+    );
+    sheet.views = [{ state: 'frozen', ySplit: 2 }];
+  });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename=prc_rental_records.xlsx');
+  await workbook.xlsx.write(res);
+  res.end();
+});
+
 app.get('/api/rentals/:id', authenticate, (req, res) => {
   const record = store.records.find((entry) => String(entry.id) === String(req.params.id));
   if (!record) {
@@ -703,47 +866,6 @@ app.delete('/api/rentals/:id', authenticate, async (req, res) => {
   store.records.splice(index, 1);
   saveStore();
   return res.status(204).send();
-});
-
-app.get('/api/rentals/export', authenticate, async (req, res) => {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Records');
-  worksheet.columns = [
-    { header: 'Sequence', key: 'sequence', width: 12 },
-    { header: 'Building', key: 'building', width: 12 },
-    { header: 'Floor', key: 'floor', width: 10 },
-    { header: 'Room Number', key: 'room_number', width: 20 },
-    { header: 'Company', key: 'company', width: 24 },
-    { header: 'Note', key: 'note', width: 30 },
-    { header: 'Move In Date', key: 'move_in_date', width: 18 },
-  ];
-
-  worksheet.addRows(
-    store.records.map((record) => ({
-      sequence: record.sequence,
-      building: record.building,
-      floor: record.floor,
-      room_number: record.room_number,
-      company: record.company || '',
-      note: record.note || '',
-      move_in_date: record.move_in_date || '',
-    }))
-  );
-
-  const headerRow = worksheet.getRow(1);
-  headerRow.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF5B2D8E' },
-    };
-  });
-
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename=prc_rental_records.xlsx');
-  await workbook.xlsx.write(res);
-  res.end();
 });
 
 loadStore();
