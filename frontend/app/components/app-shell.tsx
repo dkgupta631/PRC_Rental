@@ -48,6 +48,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     router.push('/login');
   }
 
+  // Several nav items can share a path prefix (e.g. /rentals and /rentals/add) —
+  // pick the single longest-matching href so only one item lights up at a time.
+  const activeHref = navItems
+    .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--light)] text-[var(--dark)]">
       {mobileOpen && (
@@ -89,7 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {navItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const active = item.href === activeHref;
             const Icon = item.icon;
             const label = t(item.labelKey);
             return (

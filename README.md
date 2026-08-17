@@ -8,18 +8,20 @@ Occupancy management system for tracking rental rooms across buildings — who's
 | -------- | ------------------------------------------------------------------- |
 | Frontend | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4, ESLint 9 |
 | Backend  | Node.js, Express 4, JWT auth, `mssql` driver                       |
-| Data     | Microsoft SQL Server, with an automatic JSON-file fallback (`backend/data/store.json`) when SQL Server isn't reachable |
+| Data     | Microsoft SQL Server — the system of record. All reads and writes go through it when it's reachable. |
 
 The frontend stack is fully current (Next 16 / React 19 / Tailwind 4). The backend is a deliberately lightweight, plain Express + CommonJS API — no ORM, no TypeScript, no build step — which keeps it simple but is a more traditional setup than the frontend.
+
+**This is a real database-backed app, not a static demo.** Creating, editing, and deleting a rental writes directly to `dbo.prc_rental_table` in SQL Server (see the route handlers in `backend/server.js`) — `backend/data/store.json` is only a local write-through cache the API keeps in sync after every successful SQL write, so requests stay fast and the app can keep serving briefly if SQL Server hiccups. It is not the source of truth and is never read from once SQL Server is reachable at startup.
 
 ## Project structure
 
 ```
 PRC_Rental/
 ├── backend/            Express API (port 4000)
-│   ├── server.js       Routes, auth, DB connection, JSON-store fallback
+│   ├── server.js       Routes, auth, SQL Server connection, local write-through cache
 │   ├── db/schema.sql    SQL Server schema, applied automatically on connect
-│   ├── data/store.json Local fallback data store (used when SQL Server is unavailable)
+│   ├── data/store.json Local cache mirrored from SQL Server (used as a fallback only if SQL Server is unreachable at startup)
 │   └── .env             Local config (not committed — see Configuration below)
 ├── frontend/           Next.js app (port 3000)
 │   └── app/            App Router pages, components, and API client
@@ -32,7 +34,8 @@ PRC_Rental/
 ## Prerequisites
 
 - Node.js 20+
-- (Optional) A running SQL Server instance. If none is reachable, the API automatically falls back to the local JSON store in `backend/data/store.json`, so you can develop without a database.
+- A running SQL Server instance, configured via `backend/.env` (see [Configuration](#configuration)). This repo's checked-in `backend/.env` already points at a local SQL Server Express instance (`localhost\SQLEXPRESS`, database `prc_rental_db`) with the schema and real rental data loaded — `npm run dev` connects to it as-is.
+- If SQL Server is briefly unreachable, the API logs a warning and keeps serving from its local write-through cache (`backend/data/store.json`) instead of going down — a resilience fallback, not the intended way to run the app. Point `backend/.env` at a real, reachable SQL Server for normal use.
 
 ## Configuration
 
@@ -57,7 +60,7 @@ cp backend/.env.example backend/.env
 | `FRONTEND_URL`                 | Allowed CORS origin for the frontend                  | `http://localhost:3000` |
 | `ALLOW_CUSTOM_ROOMS`           | Allow room numbers outside the predefined ranges       | `false`                  |
 
-If `DB_CONNECTION_STRING` (or the SQL Server it points to) isn't reachable, the API logs a warning and continues to serve from `backend/data/store.json` — no database is required to run the app locally.
+On startup the API connects to SQL Server, applies `backend/db/schema.sql` (creates any missing tables), and seeds a default admin user if `dbo.users` is empty. From then on, every rental create/update/delete writes straight to `dbo.prc_rental_table`. If `DB_CONNECTION_STRING` (or the SQL Server it points to) isn't reachable at startup, the API logs a warning and falls back to reading/writing `backend/data/store.json` only — a temporary safety net, not a substitute for a working database connection.
 
 The frontend needs no configuration for local development; it talks to the API on the same hostname, port `4000`. Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` only if the API is hosted elsewhere.
 
@@ -76,7 +79,7 @@ That's it. On first run this installs `backend/` and `frontend/` dependencies au
 
 Press `Ctrl+C` to stop both.
 
-**Default login** (seeded when the JSON store is empty): mobile `0812345678`, password `password123`.
+**Default login** (seeded into `dbo.users` on first connect if the table is empty): mobile `0812345678`, password `password123`.
 
 ## Scripts
 
